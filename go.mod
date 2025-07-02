@@ -1,4 +1,4 @@
-module screenshot-cli
+module github.com/funnyzak/screenshot-cli
 
 go 1.21
 

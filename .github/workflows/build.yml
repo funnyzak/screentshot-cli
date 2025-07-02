@@ -61,8 +61,7 @@ jobs:
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 0
       run: |
-        go build -ldflags "-s -w -X main.version=${{ github.sha }}" \
-          -o ${{ matrix.binary_name }} cmd/main.go
+        go build -ldflags "-s -w -X main.version=${{ github.sha }}" -o ${{ matrix.binary_name }} cmd/main.go
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

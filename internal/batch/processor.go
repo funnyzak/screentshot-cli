@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"screenshot-cli/internal/capture"
-	"screenshot-cli/internal/config"
-	"screenshot-cli/internal/output"
+	"github.com/funnyzak/screenshot-cli/internal/capture"
+	"github.com/funnyzak/screenshot-cli/internal/config"
+	"github.com/funnyzak/screenshot-cli/internal/output"
 )
 
 // ProcessBatch handles batch screenshot processing

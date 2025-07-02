@@ -71,8 +71,7 @@ jobs:
         CGO_ENABLED: 0
         VERSION: ${{ steps.version.outputs.version }}
       run: |
-        go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" \
-          -o ${{ matrix.binary_name }} cmd/main.go
+        go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o ${{ matrix.binary_name }} cmd/main.go
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -103,6 +102,25 @@ jobs:
         else
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
+
+    - name: Get commit details
+      id: commit_details
+      run: |
+        if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+        else
+          echo "author=Manual Release" >> $GITHUB_OUTPUT
+          echo "email=manual@release.com" >> $GITHUB_OUTPUT
+          echo "message=Manual release ${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get package info
+      id: package
+      run: |
+        echo "name=screenshot-cli" >> $GITHUB_OUTPUT
+        echo "version=${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
 
     - name: Generate changelog
       id: changelog
@@ -208,7 +226,7 @@ jobs:
         • Repository: ${{ github.repository }}
         • Tag: ${{ github.ref }}
         • Project: ${{ steps.package.outputs.name }}
-        • Version: v${{ steps.package.outputs.version }}${COMMIT_INFO}
+        • Version: ${{ steps.package.outputs.version }}${COMMIT_INFO}
 
         📦 Build Information
         • Platforms: Linux/Windows/macOS (amd64/arm64)
@@ -218,7 +236,7 @@ jobs:
         • $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
 
         📎 Related Links
-        • [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF#refs/tags/})
+        • [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }})
         • [Download Binaries](https://github.com/${{ github.repository }}/releases/latest)" \
         "${{ secrets.APPRISE_HTTP_URL }}"
         

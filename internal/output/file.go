@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"screenshot-cli/internal/config"
+	"github.com/funnyzak/screenshot-cli/internal/config"
 )
 
 // SaveToFile saves an image to a file with the specified configuration

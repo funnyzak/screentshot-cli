@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"screenshot-cli/internal/batch"
-	"screenshot-cli/internal/capture"
-	"screenshot-cli/internal/config"
-	"screenshot-cli/internal/output"
+	"github.com/funnyzak/screenshot-cli/internal/batch"
+	"github.com/funnyzak/screenshot-cli/internal/capture"
+	"github.com/funnyzak/screenshot-cli/internal/config"
+	"github.com/funnyzak/screenshot-cli/internal/output"
 
 	"github.com/spf13/cobra"
 )

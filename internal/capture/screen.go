@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"screenshot-cli/internal/config"
+	"github.com/funnyzak/screenshot-cli/internal/config"
 )
 
 // CaptureScreen captures a screenshot based on the configuration

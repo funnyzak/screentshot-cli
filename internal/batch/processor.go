@@ -3,6 +3,7 @@ package batch
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/funnyzak/screenshot-cli/internal/capture"
@@ -28,6 +29,17 @@ func ProcessBatch(cfg *config.Config) error {
 
 		// Generate output path
 		outputPath := output.GetOutputPath(cfg, templateProcessor)
+
+		// For batch processing without template, ensure unique filenames
+		if cfg.Template == "" && cfg.Count > 1 {
+			// Generate unique filename with counter
+			ext := filepath.Ext(outputPath)
+			if ext == "" {
+				ext = "." + cfg.Format
+			}
+			baseName := strings.TrimSuffix(filepath.Base(outputPath), ext)
+			outputPath = filepath.Join(filepath.Dir(outputPath), fmt.Sprintf("%s_%03d%s", baseName, i, ext))
+		}
 
 		// Ensure full path includes directory
 		if cfg.Dir != "." {
@@ -89,6 +101,17 @@ func ProcessBatchWithProgress(cfg *config.Config) error {
 
 		// Generate output path
 		outputPath := output.GetOutputPath(cfg, templateProcessor)
+
+		// For batch processing without template, ensure unique filenames
+		if cfg.Template == "" && cfg.Count > 1 {
+			// Generate unique filename with counter
+			ext := filepath.Ext(outputPath)
+			if ext == "" {
+				ext = "." + cfg.Format
+			}
+			baseName := strings.TrimSuffix(filepath.Base(outputPath), ext)
+			outputPath = filepath.Join(filepath.Dir(outputPath), fmt.Sprintf("%s_%03d%s", baseName, i, ext))
+		}
 
 		// Ensure full path includes directory
 		if cfg.Dir != "." {

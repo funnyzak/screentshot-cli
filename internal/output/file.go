@@ -11,8 +11,14 @@ import (
 
 // SaveToFile saves an image to a file with the specified configuration
 func SaveToFile(img image.Image, config *config.Config) error {
+	// Create template processor
+	templateProcessor := config.NewTemplateProcessor()
+
+	// Get the actual output path (process template if needed)
+	outputPath := GetOutputPath(config, templateProcessor)
+
 	// Ensure output directory exists
-	if err := ensureDirectory(config.OutputPath); err != nil {
+	if err := ensureDirectory(outputPath); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -23,7 +29,7 @@ func SaveToFile(img image.Image, config *config.Config) error {
 	}
 
 	// Write to file
-	if err := os.WriteFile(config.OutputPath, data, 0644); err != nil {
+	if err := os.WriteFile(outputPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 

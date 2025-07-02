@@ -37,10 +37,11 @@ EXAMPLES:
   # Batch processing
   sshot -n 10 -i 3 -p "batch"              # 10 screenshots every 3 seconds
   sshot -n 5 -i 2 -d "./screenshots"       # Save to custom directory
+  # If no template is provided, filenames will be auto-numbered: screenshot_001.png, screenshot_002.png, ...
   
   # Multi-display support
-  sshot -d 0 -o primary.png                # Primary display
-  sshot -d 1 -o secondary.png              # Secondary display
+  sshot --display 0 -o primary.png         # Primary display
+  sshot --display 1 -o secondary.png       # Secondary display
   
   # Advanced templates
   sshot -t "screen_{date}_{time}_{counter}.png" -n 5
@@ -87,7 +88,7 @@ SUPPORTED FORMATS:
 	// Screenshot flags
 	rootCmd.Flags().StringP("region", "r", "", "Capture specific region \"x,y,width,height\" (e.g., \"100,100,800,600\")")
 	rootCmd.Flags().StringP("output", "o", "screenshot.png", "Output file path (use \"\" for clipboard only)")
-	rootCmd.Flags().IntP("display", "d", 0, "Display index to capture (0=primary, 1=secondary, etc.)")
+	rootCmd.Flags().Int("display", 0, "Display index to capture (0=primary, 1=secondary, etc.)")
 
 	// Output control flags
 	rootCmd.Flags().StringP("format", "f", "png", "Output format: png, jpg, bmp, or gif")
@@ -99,7 +100,7 @@ SUPPORTED FORMATS:
 	rootCmd.Flags().IntP("count", "n", 1, "Number of screenshots to capture (use >1 for batch mode)")
 	rootCmd.Flags().IntP("interval", "i", 1, "Interval between screenshots in seconds")
 	rootCmd.Flags().StringP("prefix", "p", "shot", "Filename prefix for batch processing")
-	rootCmd.Flags().StringP("directory", "", ".", "Output directory for screenshots")
+	rootCmd.Flags().StringP("directory", "d", ".", "Output directory for screenshots")
 
 	// Add subcommands
 	var infoCmd = &cobra.Command{
@@ -171,8 +172,13 @@ func captureSingleScreenshot(config *config.Config) error {
 		if err := output.CopyToClipboard(img); err != nil {
 			return fmt.Errorf("failed to copy to clipboard: %w", err)
 		}
-		if verbose {
-			fmt.Println("Screenshot copied to clipboard")
+
+		// Provide user feedback
+		if output.IsImageClipboardSupported() {
+			fmt.Println("✓ Screenshot copied to clipboard")
+		} else {
+			fmt.Println("⚠ Screenshot copied to clipboard (as data URL)")
+			fmt.Println("   Note: Some applications may not support image data URLs")
 		}
 	}
 

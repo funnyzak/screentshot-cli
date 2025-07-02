@@ -67,11 +67,22 @@ func ParseArgs(cmd *cobra.Command, args []string) (*Config, error) {
 	config.Display = display
 
 	// Parse output path
+	outputFlag := cmd.Flags().Lookup("output")
 	outputPath, _ := cmd.Flags().GetString("output")
 	if len(args) > 0 {
 		outputPath = args[0]
 	}
-	config.OutputPath = outputPath
+
+	// Parse clipboard flag
+	clipboard, _ := cmd.Flags().GetBool("clipboard")
+	config.Clipboard = clipboard
+
+	// 只用 -c 且未显式指定 -o 时，不保存文件
+	if clipboard && (outputFlag == nil || !outputFlag.Changed) && len(args) == 0 {
+		config.OutputPath = ""
+	} else {
+		config.OutputPath = outputPath
+	}
 
 	// Parse format
 	format, _ := cmd.Flags().GetString("format")
@@ -86,10 +97,6 @@ func ParseArgs(cmd *cobra.Command, args []string) (*Config, error) {
 		return nil, fmt.Errorf("quality must be between 1 and 100")
 	}
 	config.Quality = quality
-
-	// Parse clipboard
-	clipboard, _ := cmd.Flags().GetBool("clipboard")
-	config.Clipboard = clipboard
 
 	// Parse template
 	template, _ := cmd.Flags().GetString("template")

@@ -17,6 +17,25 @@ on:
         - windows
         - darwin
         - linux
+      version:
+        description: 'Build version (optional)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      platform:
+        description: 'Target platform'
+        required: false
+        default: 'all'
+        type: string
+      version:
+        description: 'Build version'
+        required: false
+        type: string
+    outputs:
+      artifacts:
+        description: 'Build artifacts'
+        value: ${{ jobs.build.outputs.artifacts }}
 
 jobs:
   build:
@@ -55,13 +74,26 @@ jobs:
         go-version: '1.21'
         cache: true
 
+    - name: Determine version
+      id: version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_call" ] && [ -n "${{ inputs.version }}" ]; then
+          echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.sha }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build binary
       env:
         GOOS: ${{ matrix.platform }}
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 0
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        go build -ldflags "-s -w -X main.version=${{ github.sha }}" -o ${{ matrix.binary_name }} cmd/main.go
+        go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o ${{ matrix.binary_name }} cmd/main.go
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -87,27 +119,37 @@ jobs:
         go-version: '1.21'
         cache: true
 
+    - name: Determine version
+      id: version
+      shell: bash
+      run: |
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.sha }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build for specific platform
       shell: bash
       run: |
         if [ "${{ matrix.platform }}" = "all" ]; then
           # Build for all platforms
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-amd64 cmd/main.go
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-arm64 cmd/main.go
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-windows-amd64.exe cmd/main.go
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-amd64 cmd/main.go
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-arm64 cmd/main.go
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-linux-amd64 cmd/main.go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-linux-arm64 cmd/main.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-windows-amd64.exe cmd/main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-darwin-amd64 cmd/main.go
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-darwin-arm64 cmd/main.go
         else
           # Build for specific platform
           case "${{ matrix.platform }}" in
             "windows")
-              GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-windows-amd64.exe cmd/main.go
+              GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-windows-amd64.exe cmd/main.go
               ;;
             "darwin")
-              GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-amd64 cmd/main.go
+              GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-darwin-amd64 cmd/main.go
               ;;
             "linux")
-              GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-amd64 cmd/main.go
+              GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o sshot-linux-amd64 cmd/main.go
               ;;
           esac
         fi

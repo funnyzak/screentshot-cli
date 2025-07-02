@@ -18,71 +18,11 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            arch: amd64
-            binary_name: sshot-linux-amd64
-          - os: ubuntu-latest
-            platform: linux
-            arch: arm64
-            binary_name: sshot-linux-arm64
-          - os: windows-latest
-            platform: windows
-            arch: amd64
-            binary_name: sshot-windows-amd64.exe
-          - os: macos-latest
-            platform: darwin
-            arch: amd64
-            binary_name: sshot-darwin-amd64
-          - os: macos-latest
-            platform: darwin
-            arch: arm64
-            binary_name: sshot-darwin-arm64
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        cache: true
-
-    - name: Determine version
-      id: version
-      shell: bash
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        else
-          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.platform }}
-        GOARCH: ${{ matrix.arch }}
-        CGO_ENABLED: 0
-        VERSION: ${{ steps.version.outputs.version }}
-      run: |
-        go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" -o ${{ matrix.binary_name }} cmd/main.go
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.binary_name }}
-        path: ${{ matrix.binary_name }}
-        retention-days: 30
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: all
+      version: ${{ github.event.inputs.version || github.ref_name }}
+    secrets: inherit
 
   release:
     needs: build
@@ -192,6 +132,14 @@ jobs:
       with:
         path: dist/
 
+    - name: List downloaded files
+      shell: bash
+      run: |
+        echo "📁 Contents of dist/ directory:"
+        ls -la dist/ || echo "dist/ directory is empty or doesn't exist"
+        echo "📁 Contents of current directory:"
+        ls -la
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -215,6 +163,37 @@ jobs:
     if: always()
     
     steps:
+    - name: Determine version for notification
+      id: version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get commit details for notification
+      id: commit_details
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
+        else
+          echo "author=Manual Release" >> $GITHUB_OUTPUT
+          echo "email=manual@release.com" >> $GITHUB_OUTPUT
+          echo "message=Manual release ${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get package info for notification
+      id: package
+      shell: bash
+      run: |
+        echo "name=screenshot-cli" >> $GITHUB_OUTPUT
+        echo "version=${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
+
     - name: Notify on success
       if: needs.release.result == 'success'
       shell: bash

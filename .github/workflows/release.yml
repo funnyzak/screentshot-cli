@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Is this a prerelease?'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            binary_name: sshot-linux-amd64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            binary_name: sshot-linux-arm64
+          - os: windows-latest
+            platform: windows
+            arch: amd64
+            binary_name: sshot-windows-amd64.exe
+          - os: macos-latest
+            platform: darwin
+            arch: amd64
+            binary_name: sshot-darwin-amd64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            binary_name: sshot-darwin-arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.platform }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 0
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        go build -ldflags "-s -w -X main.version=${{ steps.version.outputs.version }}" \
+          -o ${{ matrix.binary_name }} cmd/main.go
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.binary_name }}
+        path: ${{ matrix.binary_name }}
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate changelog
+      id: changelog
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: commits } = await github.rest.repos.listCommits({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: context.sha,
+            per_page: 100
+          });
+          
+          let changelog = `## What's Changed\n\n`;
+          
+          // Group commits by type
+          const features = [];
+          const fixes = [];
+          const docs = [];
+          const other = [];
+          
+          for (const commit of commits) {
+            const message = commit.commit.message;
+            const shortHash = commit.sha.substring(0, 7);
+            
+            if (message.startsWith('feat:')) {
+              features.push(`- ${message.replace('feat:', '').trim()} (${shortHash})`);
+            } else if (message.startsWith('fix:')) {
+              fixes.push(`- ${message.replace('fix:', '').trim()} (${shortHash})`);
+            } else if (message.startsWith('docs:')) {
+              docs.push(`- ${message.replace('docs:', '').trim()} (${shortHash})`);
+            } else if (!message.startsWith('Merge') && !message.startsWith('chore:')) {
+              other.push(`- ${message} (${shortHash})`);
+            }
+          }
+          
+          if (features.length > 0) {
+            changelog += `### ✨ New Features\n${features.join('\n')}\n\n`;
+          }
+          
+          if (fixes.length > 0) {
+            changelog += `### 🐛 Bug Fixes\n${fixes.join('\n')}\n\n`;
+          }
+          
+          if (docs.length > 0) {
+            changelog += `### 📚 Documentation\n${docs.join('\n')}\n\n`;
+          }
+          
+          if (other.length > 0) {
+            changelog += `### 🔧 Other Changes\n${other.join('\n')}\n\n`;
+          }
+          
+          changelog += `\n---\n\n**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/v0.0.0...${context.ref.replace('refs/tags/', '')}`;
+          
+          core.setOutput('changelog', changelog);
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Release ${{ steps.version.outputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease || false }}
+        files: |
+          dist/sshot-*
+        generate_release_notes: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    needs: release
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: needs.release.result == 'success'
+      run: |
+        echo "✅ Release ${{ steps.version.outputs.version }} created successfully!"
+
+    - name: Send Apprise Notification
+      if: needs.release.result == 'success'
+      run: |
+        COMMIT_INFO=""
+        if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+          COMMIT_INFO="
+        🔄 Commit Details
+        • Author: ${{ steps.commit_details.outputs.author }} <${{ steps.commit_details.outputs.email }}>
+        • Message: ${{ steps.commit_details.outputs.message }}"
+        fi
+        
+        curl -X POST \
+        -F "tag=pro" \
+        -F "body=✅ Release Success Notification #release ##sshot
+
+        💾 Release Information
+        • Repository: ${{ github.repository }}
+        • Tag: ${{ github.ref }}
+        • Project: ${{ steps.package.outputs.name }}
+        • Version: v${{ steps.package.outputs.version }}${COMMIT_INFO}
+
+        📦 Build Information
+        • Platforms: Linux/Windows/macOS (amd64/arm64)
+        • Build Time: $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
+
+        ⏰ Release Time
+        • $(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
+
+        📎 Related Links
+        • [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF#refs/tags/})
+        • [Download Binaries](https://github.com/${{ github.repository }}/releases/latest)" \
+        "${{ secrets.APPRISE_HTTP_URL }}"
+        
+    - name: Notify on failure
+      if: needs.release.result == 'failure'
+      run: |
+        echo "❌ Release failed!"
+        exit 1 

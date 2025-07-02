@@ -1,0 +1,120 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Target platform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - windows
+        - darwin
+        - linux
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            binary_name: sshot-linux-amd64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            binary_name: sshot-linux-arm64
+          - os: windows-latest
+            platform: windows
+            arch: amd64
+            binary_name: sshot-windows-amd64.exe
+          - os: macos-latest
+            platform: darwin
+            arch: amd64
+            binary_name: sshot-darwin-amd64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            binary_name: sshot-darwin-arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.platform }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -ldflags "-s -w -X main.version=${{ github.sha }}" \
+          -o ${{ matrix.binary_name }} cmd/main.go
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.binary_name }}
+        path: ${{ matrix.binary_name }}
+        retention-days: 30
+
+  build-manual:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: ${{ github.event.inputs.platform }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Build for specific platform
+      run: |
+        if [ "${{ matrix.platform }}" = "all" ]; then
+          # Build for all platforms
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-amd64 cmd/main.go
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-arm64 cmd/main.go
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-windows-amd64.exe cmd/main.go
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-amd64 cmd/main.go
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-arm64 cmd/main.go
+        else
+          # Build for specific platform
+          case "${{ matrix.platform }}" in
+            "windows")
+              GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-windows-amd64.exe cmd/main.go
+              ;;
+            "darwin")
+              GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-darwin-amd64 cmd/main.go
+              ;;
+            "linux")
+              GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o sshot-linux-amd64 cmd/main.go
+              ;;
+          esac
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: manual-build-${{ matrix.platform }}
+        path: sshot-*
+        retention-days: 30 

@@ -51,20 +51,6 @@ jobs:
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Get commit details
-      id: commit_details
-      shell: bash
-      run: |
-        if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
-          echo "email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
-          echo "message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
-        else
-          echo "author=Manual Release" >> $GITHUB_OUTPUT
-          echo "email=manual@release.com" >> $GITHUB_OUTPUT
-          echo "message=Manual release ${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        fi
-
     - name: Get package info
       id: package
       shell: bash
@@ -72,71 +58,19 @@ jobs:
         echo "name=screenshot-cli" >> $GITHUB_OUTPUT
         echo "version=${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
 
-    - name: Generate changelog
-      id: changelog
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const { data: commits } = await github.rest.repos.listCommits({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            sha: context.sha,
-            per_page: 100
-          });
-          
-          let changelog = `## What's Changed\n\n`;
-          
-          // Group commits by type
-          const features = [];
-          const fixes = [];
-          const docs = [];
-          const other = [];
-          
-          for (const commit of commits) {
-            const message = commit.commit.message;
-            const shortHash = commit.sha.substring(0, 7);
-            
-            if (message.startsWith('feat:')) {
-              features.push(`- ${message.replace('feat:', '').trim()} (${shortHash})`);
-            } else if (message.startsWith('fix:')) {
-              fixes.push(`- ${message.replace('fix:', '').trim()} (${shortHash})`);
-            } else if (message.startsWith('docs:')) {
-              docs.push(`- ${message.replace('docs:', '').trim()} (${shortHash})`);
-            } else if (!message.startsWith('Merge') && !message.startsWith('chore:')) {
-              other.push(`- ${message} (${shortHash})`);
-            }
-          }
-          
-          if (features.length > 0) {
-            changelog += `### ✨ New Features\n${features.join('\n')}\n\n`;
-          }
-          
-          if (fixes.length > 0) {
-            changelog += `### 🐛 Bug Fixes\n${fixes.join('\n')}\n\n`;
-          }
-          
-          if (docs.length > 0) {
-            changelog += `### 📚 Documentation\n${docs.join('\n')}\n\n`;
-          }
-          
-          if (other.length > 0) {
-            changelog += `### 🔧 Other Changes\n${other.join('\n')}\n\n`;
-          }
-          
-          changelog += `\n---\n\n**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/v0.0.0...${context.ref.replace('refs/tags/', '')}`;
-          
-          core.setOutput('changelog', changelog);
-
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
         path: dist/
+        merge-multiple: true
 
     - name: List downloaded files
       shell: bash
       run: |
         echo "📁 Contents of dist/ directory:"
         ls -la dist/ || echo "dist/ directory is empty or doesn't exist"
+        echo "📁 Recursive contents of dist/ directory:"
+        find dist/ -type f -exec ls -la {} \; 2>/dev/null || echo "No files found in dist/"
         echo "📁 Contents of current directory:"
         ls -la
 
@@ -145,12 +79,11 @@ jobs:
       with:
         tag_name: ${{ steps.version.outputs.version }}
         name: Release ${{ steps.version.outputs.version }}
-        body: ${{ steps.changelog.outputs.changelog }}
         draft: false
         prerelease: ${{ github.event.inputs.prerelease || false }}
         files: |
           dist/sshot-*
-        generate_release_notes: false
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -173,20 +106,6 @@ jobs:
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Get commit details for notification
-      id: commit_details
-      shell: bash
-      run: |
-        if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
-          echo "email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
-          echo "message=$(git log -1 --pretty=format:'%s')" >> $GITHUB_OUTPUT
-        else
-          echo "author=Manual Release" >> $GITHUB_OUTPUT
-          echo "email=manual@release.com" >> $GITHUB_OUTPUT
-          echo "message=Manual release ${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        fi
-
     - name: Get package info for notification
       id: package
       shell: bash
@@ -194,24 +113,10 @@ jobs:
         echo "name=screenshot-cli" >> $GITHUB_OUTPUT
         echo "version=${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
 
-    - name: Notify on success
-      if: needs.release.result == 'success'
-      shell: bash
-      run: |
-        echo "✅ Release ${{ steps.version.outputs.version }} created successfully!"
-
     - name: Send Apprise Notification
       if: needs.release.result == 'success'
       shell: bash
       run: |
-        COMMIT_INFO=""
-        if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-          COMMIT_INFO="
-        🔄 Commit Details
-        • Author: ${{ steps.commit_details.outputs.author }} <${{ steps.commit_details.outputs.email }}>
-        • Message: ${{ steps.commit_details.outputs.message }}"
-        fi
-        
         curl -X POST \
         -F "tag=pro" \
         -F "body=✅ Release Success Notification #release ##sshot

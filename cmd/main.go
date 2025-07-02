@@ -21,7 +21,7 @@ func main() {
 	var rootCmd = &cobra.Command{
 		Use:     "sshot [flags] [output_file]",
 		Short:   "A lightweight screenshot CLI tool",
-		Long:    `A lightweight, dependency-free Windows command line screenshot tool that supports full screen and region screenshots with flexible output control and batch processing capabilities.`,
+		Long:    `A lightweight, cross-platform command line screenshot tool that supports full screen and region screenshots with flexible output control and batch processing capabilities.`,
 		Version: version,
 		RunE:    runScreenshot,
 	}
@@ -32,6 +32,7 @@ func main() {
 	// Screenshot flags
 	rootCmd.Flags().StringP("region", "r", "", "Region screenshot \"x,y,width,height\"")
 	rootCmd.Flags().StringP("output", "o", "screenshot.png", "Output file path")
+	rootCmd.Flags().IntP("display", "d", 0, "Display index to capture (0 for primary)")
 
 	// Output control flags
 	rootCmd.Flags().StringP("format", "f", "png", "Output format (png/jpg/bmp/gif)")
@@ -43,7 +44,15 @@ func main() {
 	rootCmd.Flags().IntP("count", "n", 1, "Number of screenshots")
 	rootCmd.Flags().IntP("interval", "i", 1, "Screenshot interval (seconds)")
 	rootCmd.Flags().StringP("prefix", "p", "shot", "Filename prefix")
-	rootCmd.Flags().StringP("dir", "d", ".", "Output directory")
+	rootCmd.Flags().StringP("directory", "", ".", "Output directory")
+
+	// Add subcommands
+	var infoCmd = &cobra.Command{
+		Use:   "info",
+		Short: "Show display information",
+		RunE:  runInfo,
+	}
+	rootCmd.AddCommand(infoCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -96,6 +105,33 @@ func captureSingleScreenshot(config *config.Config) error {
 		if verbose {
 			fmt.Printf("Screenshot saved to: %s\n", config.OutputPath)
 		}
+	}
+
+	return nil
+}
+
+func runInfo(cmd *cobra.Command, args []string) error {
+	// Check platform support
+	if !capture.IsPlatformSupported() {
+		fmt.Printf("Platform not supported: %s\n", capture.GetPlatformInfo())
+		return nil
+	}
+
+	// Get display information
+	displays, err := capture.GetDisplayInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get display info: %w", err)
+	}
+
+	fmt.Printf("Platform: %s\n", capture.GetPlatformInfo())
+	fmt.Printf("Active displays: %d\n\n", len(displays))
+
+	for i, display := range displays {
+		fmt.Printf("Display %d:\n", i)
+		fmt.Printf("  Bounds: %s\n", display.String())
+		fmt.Printf("  Size: %dx%d\n", display.Dx(), display.Dy())
+		fmt.Printf("  Position: (%d, %d)\n", display.Min.X, display.Min.Y)
+		fmt.Println()
 	}
 
 	return nil

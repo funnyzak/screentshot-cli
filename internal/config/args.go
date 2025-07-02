@@ -13,6 +13,7 @@ type Config struct {
 	// Screenshot settings
 	Region     *Region
 	OutputPath string
+	Display    int // Display index to capture
 
 	// Output control
 	Format    string
@@ -57,6 +58,13 @@ func ParseArgs(cmd *cobra.Command, args []string) (*Config, error) {
 		}
 		config.Region = region
 	}
+
+	// Parse display
+	display, _ := cmd.Flags().GetInt("display")
+	if display < 0 {
+		return nil, fmt.Errorf("display index must be non-negative")
+	}
+	config.Display = display
 
 	// Parse output path
 	outputPath, _ := cmd.Flags().GetString("output")
@@ -103,7 +111,7 @@ func ParseArgs(cmd *cobra.Command, args []string) (*Config, error) {
 	prefix, _ := cmd.Flags().GetString("prefix")
 	config.Prefix = prefix
 
-	dir, _ := cmd.Flags().GetString("dir")
+	dir, _ := cmd.Flags().GetString("directory")
 	config.Dir = dir
 
 	// Process template if provided

@@ -3,15 +3,10 @@ package capture
 import (
 	"fmt"
 	"image"
-	"image/color"
-	"image/png"
-	"os"
-	"os/exec"
 	"runtime"
-	"strings"
-	"time"
 
 	"github.com/funnyzak/screenshot-cli/internal/config"
+	"github.com/kbinani/screenshot"
 )
 
 // CaptureScreen captures a screenshot based on the configuration
@@ -19,149 +14,78 @@ func CaptureScreen(config *config.Config) (image.Image, error) {
 	if config.Region != nil {
 		return captureRegion(config.Region)
 	}
-	return captureFullScreen()
+	return captureFullScreen(config.Display)
 }
 
-// captureFullScreen captures the entire screen
-func captureFullScreen() (image.Image, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return captureFullScreenMac()
-	case "windows":
-		return captureFullScreenWindows()
-	case "linux":
-		return captureFullScreenLinux()
-	default:
-		return createDummyImage(1920, 1080), nil
-	}
-}
-
-// captureRegion captures a specific region of the screen
-func captureRegion(region *config.Region) (image.Image, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return captureRegionMac(region)
-	case "windows":
-		return captureRegionWindows(region)
-	case "linux":
-		return captureRegionLinux(region)
-	default:
-		return createDummyImage(region.Width, region.Height), nil
-	}
-}
-
-// captureFullScreenMac captures full screen on macOS using screencapture
-func captureFullScreenMac() (image.Image, error) {
-	// Create a temporary file
-	tempFile := fmt.Sprintf("/tmp/screenshot_%d.png", time.Now().Unix())
-
-	// Use screencapture command
-	cmd := exec.Command("screencapture", "-x", tempFile)
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to capture screen: %w", err)
+// captureFullScreen captures the entire screen using kbinani/screenshot
+func captureFullScreen(displayIndex int) (image.Image, error) {
+	// Get the number of active displays
+	n := screenshot.NumActiveDisplays()
+	if n == 0 {
+		return nil, fmt.Errorf("no active displays found")
 	}
 
-	// Read the image file
-	file, err := os.Open(tempFile)
+	// Validate display index
+	if displayIndex < 0 || displayIndex >= n {
+		return nil, fmt.Errorf("invalid display index %d, available displays: %d", displayIndex, n)
+	}
+
+	// Capture the specified display
+	img, err := screenshot.CaptureDisplay(displayIndex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open screenshot file: %w", err)
-	}
-	defer file.Close()
-	defer os.Remove(tempFile)
-
-	// Decode the image
-	img, err := png.Decode(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode screenshot: %w", err)
+		return nil, fmt.Errorf("failed to capture display %d: %w", displayIndex, err)
 	}
 
 	return img, nil
 }
 
-// captureRegionMac captures a region on macOS
-func captureRegionMac(region *config.Region) (image.Image, error) {
-	tempFile := fmt.Sprintf("/tmp/screenshot_%d.png", time.Now().Unix())
+// captureRegion captures a specific region of the screen using kbinani/screenshot
+func captureRegion(region *config.Region) (image.Image, error) {
+	// Create a rectangle from the region
+	rect := image.Rect(region.X, region.Y, region.X+region.Width, region.Y+region.Height)
 
-	// Use screencapture with region
-	cmd := exec.Command("screencapture", "-R",
-		fmt.Sprintf("%d,%d,%d,%d", region.X, region.Y, region.Width, region.Height),
-		"-x", tempFile)
-
-	if err := cmd.Run(); err != nil {
+	// Capture the specified region
+	img, err := screenshot.CaptureRect(rect)
+	if err != nil {
 		return nil, fmt.Errorf("failed to capture region: %w", err)
 	}
 
-	// Read the image file
-	file, err := os.Open(tempFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open screenshot file: %w", err)
-	}
-	defer file.Close()
-	defer os.Remove(tempFile)
-
-	// Decode the image
-	img, err := png.Decode(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode screenshot: %w", err)
-	}
-
 	return img, nil
-}
-
-// captureFullScreenWindows captures full screen on Windows
-func captureFullScreenWindows() (image.Image, error) {
-	// For now, return a dummy image
-	// In a real implementation, you would use Windows API or a library like robotgo
-	return createDummyImage(1920, 1080), nil
-}
-
-// captureRegionWindows captures a region on Windows
-func captureRegionWindows(region *config.Region) (image.Image, error) {
-	return createDummyImage(region.Width, region.Height), nil
-}
-
-// captureFullScreenLinux captures full screen on Linux
-func captureFullScreenLinux() (image.Image, error) {
-	// Try to use import command (ImageMagick)
-	cmd := exec.Command("import", "-window", "root", "-")
-	if output, err := cmd.Output(); err == nil {
-		// Try to decode the output as PNG
-		img, err := png.Decode(strings.NewReader(string(output)))
-		if err == nil {
-			return img, nil
-		}
-	}
-
-	// Fallback to dummy image
-	return createDummyImage(1920, 1080), nil
-}
-
-// captureRegionLinux captures a region on Linux
-func captureRegionLinux(region *config.Region) (image.Image, error) {
-	return createDummyImage(region.Width, region.Height), nil
-}
-
-// createDummyImage creates a dummy image for testing/fallback
-func createDummyImage(width, height int) image.Image {
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	// Fill with a gradient pattern
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			r := uint8((x * 255) / width)
-			g := uint8((y * 255) / height)
-			b := uint8(128)
-			img.Set(x, y, color.RGBA{r, g, b, 255})
-		}
-	}
-
-	return img
 }
 
 // GetDisplayInfo returns information about available displays
 func GetDisplayInfo() ([]image.Rectangle, error) {
-	// For now, return a default display
-	return []image.Rectangle{image.Rect(0, 0, 1920, 1080)}, nil
+	n := screenshot.NumActiveDisplays()
+	if n == 0 {
+		return nil, fmt.Errorf("no active displays found")
+	}
+
+	displays := make([]image.Rectangle, n)
+	for i := 0; i < n; i++ {
+		displays[i] = screenshot.GetDisplayBounds(i)
+	}
+
+	return displays, nil
+}
+
+// GetDisplayCount returns the number of active displays
+func GetDisplayCount() int {
+	return screenshot.NumActiveDisplays()
+}
+
+// CaptureDisplay captures a specific display by index
+func CaptureDisplay(displayIndex int) (image.Image, error) {
+	n := screenshot.NumActiveDisplays()
+	if displayIndex < 0 || displayIndex >= n {
+		return nil, fmt.Errorf("invalid display index %d, available displays: %d", displayIndex, n)
+	}
+
+	img, err := screenshot.CaptureDisplay(displayIndex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture display %d: %w", displayIndex, err)
+	}
+
+	return img, nil
 }
 
 // ValidateRegion checks if a region is valid for the current display setup
@@ -174,5 +98,42 @@ func ValidateRegion(region *config.Region) error {
 		return fmt.Errorf("invalid region position: (%d,%d)", region.X, region.Y)
 	}
 
-	return nil
+	// Check if region is within any display bounds
+	displays, err := GetDisplayInfo()
+	if err != nil {
+		// If we can't get display info, just validate basic constraints
+		return nil
+	}
+
+	regionRect := image.Rect(region.X, region.Y, region.X+region.Width, region.Y+region.Height)
+
+	// Check if the region intersects with any display
+	for _, display := range displays {
+		if regionRect.Overlaps(display) {
+			return nil // Region is valid
+		}
+	}
+
+	return fmt.Errorf("region (%d,%d,%d,%d) is outside all display bounds",
+		region.X, region.Y, region.Width, region.Height)
+}
+
+// GetPlatformInfo returns information about the current platform
+func GetPlatformInfo() string {
+	return fmt.Sprintf("OS: %s, Architecture: %s", runtime.GOOS, runtime.GOARCH)
+}
+
+// IsPlatformSupported checks if the current platform is supported
+func IsPlatformSupported() bool {
+	// kbinani/screenshot supports: windows, darwin, linux, freebsd, openbsd, netbsd
+	supportedOS := map[string]bool{
+		"windows": true,
+		"darwin":  true,
+		"linux":   true,
+		"freebsd": true,
+		"openbsd": true,
+		"netbsd":  true,
+	}
+
+	return supportedOS[runtime.GOOS]
 }

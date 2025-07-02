@@ -88,6 +88,7 @@ jobs:
         cache: true
 
     - name: Build for specific platform
+      shell: bash
       run: |
         if [ "${{ matrix.platform }}" = "all" ]; then
           # Build for all platforms
